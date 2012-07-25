@@ -1,4 +1,4 @@
-import sublime, sublime_plugin,re,subprocess
+import sublime, sublime_plugin, re, subprocess, json
 
 class uxtool_create_css(sublime_plugin.TextCommand):
     def run(self, edit):
@@ -50,3 +50,36 @@ class uxtool_upload_issues(sublime_plugin.TextCommand):
             print resp
             print err
             panel.insert(edit, 0,resp)
+
+class uxtool_take_screenshot(sublime_plugin.TextCommand):
+    def run(self, edit):
+        resp, err = subprocess.Popen(["screencapture","-i","/tmp/imgur_upload.png"],stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        if not err:
+            resp, err = subprocess.Popen(["curl","-F","image=@/tmp/imgur_upload.png","-F","key=2bfe50a1bbc990e30d6062ecb9216096","http://api.imgur.com/2/upload.json"],stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+            self.links = json.loads(resp)['upload']['links']
+            sublime.set_clipboard(self.links["original"])
+            sublime.status_message("Copied to clipboard %s" % self.links["original"])
+
+class uxtool_kk_sync(sublime_plugin.TextCommand):
+    def run(self, edit):
+        self.options  = [
+                            "Sync: Database",
+                            "Sync: Pull in server",
+                            "Sync: LS"
+                        ]
+        self.commands = [
+                            "ssh bitnami@kitukids.com 'mysqldump -u root -pbitnami kitukids | bzip2 -c' | bunzip2 -c | mysql -u root kitukids",
+                            "ssh","bitnami@kitukids.com 'cd /var/www/dev/ && git pull'",
+                            "ls", "-lh"
+                        ]
+        self.quick_panel(self.options, self.selecion_done)
+
+    def selecion_done(self, picked):
+        print self.commands[picked]
+        resp, err = subprocess.Popen(self.commands[picked], stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        print "--------------"
+        print err
+        sublime.status_message(resp);
+
+    def quick_panel(self, *args, **kwargs):
+        sublime.active_window().show_quick_panel(*args, **kwargs)

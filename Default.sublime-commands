@@ -8,5 +8,11 @@
   },{
     "caption": "uxTool: Upload Issues"
     , "command": "uxtool_upload_issues"
+  },{
+    "caption": "uxTool: Take ScreenShot"
+    , "command": "uxtool_take_screenshot"
+  },{
+    "caption": "uxTool: KK_Sync"
+    , "command": "uxtool_kk_sync"
   }
 ]
