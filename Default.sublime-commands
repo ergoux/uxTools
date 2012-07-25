@@ -3,7 +3,10 @@
     "caption": "uxTool: create css"
     , "command": "uxtool_create_css"
   },{
-    "caption": "uxTool: css object"
+    "caption": "uxTool: Paste css object"
     , "command": "uxtool_css_object"
+  },{
+    "caption": "uxTool: Upload Issues"
+    , "command": "uxtool_upload_issues"
   }
 ]
