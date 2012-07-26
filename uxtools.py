@@ -98,22 +98,25 @@ class uxtool_upload_issues(sublime_plugin.TextCommand):
         });
         panel.set_read_only(False)
         text = re.sub(r"\n\t", '<br>', text)
-#        text = re.sub(r"'", "\\'", text)
-        text = re.sub(r'"', '\\"', text)
         repo = re.search(r'\[\[(.+)\]\]\n',text).group(1)
         text = re.sub(r'\[\[.+\]\]\n', '', text)
-        print text
         for issue in text.split('----\n'):
             obj = issue.split("\n")
-            json = '{"title":"%s","body":"%s","assignee":"%s","milestone":"%s","labels":["%s"]}\n' % (obj[0],obj[1],obj[2],obj[3],obj[4])
-            resp, load_info = subprocess.Popen(["curl",
-            "-H","Authorization: token a1e2d5fc89820ae538c90662e6aadf21fc078ec5",
-            "-d", json,
-            "-X","POST",
-            'https://api.github.com/repos/%s/issues' % repo],
+            issue_info = {
+                "title"     : obj[0],
+                "body"      : re.sub(r"<br>", '\n', obj[1]),
+                "assignee"  : obj[2],
+                "milestone" : obj[3],
+                "labels"    : obj[4].split(",")
+            }
+            resp, load_info = subprocess.Popen([
+                "curl",
+                "-H","Authorization: token a1e2d5fc89820ae538c90662e6aadf21fc078ec5",
+                "-d", json.dumps(issue_info),
+                "-X","POST",
+                'https://api.github.com/repos/%s/issues' % repo
+            ],
             stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
-            print 'https://api.github.com/repos/%s/issues' % repo
-            print resp,load_info
             panel.insert(edit, 0,resp)
 
 class uxtool_take_screenshot(sublime_plugin.TextCommand):
