@@ -30,8 +30,9 @@ def _output_to_view(self, output_file, output, clear=False,
 class uxtool_list_issues(sublime_plugin.TextCommand):
     def run(self,edit):
         self.edit = edit
+        token = sublime.load_settings("Preferences.sublime-settings").get("git_token")
         issues, load_info = subprocess.Popen(["curl",
-            "-H","Authorization: token a061fe5e8fafc96c561093f44620e864d290b805",
+            "-H","Authorization: token %s" % token,
             "https://api.github.com/issues"],
             stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
         issues = json.loads(issues)
