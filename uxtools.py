@@ -1,5 +1,66 @@
 import sublime, sublime_plugin, re, subprocess, json
 
+def get_window(self):
+    return self.view.window() or sublime.active_window()
+
+def scratch(self, output, title=False, position=None, **kwargs):
+    scratch_file = get_window(self).new_file()
+    if title:
+        scratch_file.set_name(title)
+    scratch_file.set_scratch(True)
+    _output_to_view(self,scratch_file, output, **kwargs)
+    #scratch_file.set_read_only(True)
+    if position:
+        sublime.set_timeout(lambda: scratch_file.set_viewport_position(position), 0)
+    return scratch_file
+
+def quick_panel(self, *args, **kwargs):
+    get_window(self).show_quick_panel(*args, **kwargs)
+
+def _output_to_view(self, output_file, output, clear=False,
+        syntax="Packages/Diff/Diff.tmLanguage", **kwargs):
+    output_file.set_syntax_file(syntax)
+    edit = output_file.begin_edit()
+    if clear:
+        region = sublime.Region(0, self.output_view.size())
+        output_file.erase(edit, region)
+    output_file.insert(edit, 0, output)
+    output_file.end_edit(edit)
+
+class uxtool_list_issues(sublime_plugin.TextCommand):
+    def run(self,edit):
+        self.edit = edit
+        issues, load_info = subprocess.Popen(["curl",
+            "-H","Authorization: token a061fe5e8fafc96c561093f44620e864d290b805",
+            "https://api.github.com/issues"],
+            stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
+        issues = json.loads(issues)
+        self.options = []
+        self.issues = issues
+        for issue in issues:
+            self.options.append(str(issue['number']) + ' - ' + issue['title'])
+        quick_panel(self,self.options, self.issue_choosed)
+
+    def issue_choosed(self, picked):
+        if not picked == -1:
+            self.picked = picked
+            quick_panel(self,['view info','open url in browser','print number'], self.selection_done)
+
+    def selection_done(self,opt):
+        selected_issue = self.issues[self.picked]
+        if opt == 0:
+            scratch(self,
+                "+ %s\n--- %s\n\n%s\n\n----------\n@@ %s @@" % (
+                    selected_issue['title'],
+                    selected_issue['repository']['full_name'] + " -> issue #" + str(selected_issue['number']),
+                    selected_issue['body'],
+                    selected_issue['updated_at']
+                    ),self.issues[self.picked]['title'])
+        elif opt == 1:
+            sublime.active_window().run_command('open_url', {"url": selected_issue['html_url']})
+        elif opt == 2:
+            self.view.insert(self.edit, self.view.sel()[0].a, "#" + str(selected_issue['number']))
+
 class uxtool_create_css(sublime_plugin.TextCommand):
     def run(self, edit):
         window = self.view.window()
@@ -43,12 +104,16 @@ class uxtool_upload_issues(sublime_plugin.TextCommand):
         text = re.sub(r'\[\[.+\]\]\n', '', text)
         print text
         for issue in text.split('----\n'):
-            obj = issue.split('\n')            
+            obj = issue.split("\n")
             json = '{"title":"%s","body":"%s","assignee":"%s","milestone":"%s","labels":["%s"]}\n' % (obj[0],obj[1],obj[2],obj[3],obj[4])
-            print json
-            resp, err = subprocess.Popen(["python","/Users/gizmo/dev/python/gitTest2.py",json,repo],stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-            print resp
-            print err
+            resp, load_info = subprocess.Popen(["curl",
+            "-H","Authorization: token a1e2d5fc89820ae538c90662e6aadf21fc078ec5",
+            "-d", json,
+            "-X","POST",
+            'https://api.github.com/repos/%s/issues' % repo],
+            stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
+            print 'https://api.github.com/repos/%s/issues' % repo
+            print resp,load_info
             panel.insert(edit, 0,resp)
 
 class uxtool_take_screenshot(sublime_plugin.TextCommand):

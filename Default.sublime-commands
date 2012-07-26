@@ -1,5 +1,8 @@
 [
   {
+    "caption": "uxTool: List issues"
+    , "command": "uxtool_list_issues"
+  },{
     "caption": "uxTool: create css"
     , "command": "uxtool_create_css"
   },{
