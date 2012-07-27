@@ -57,6 +57,7 @@ class uxtool_list_all_issues(sublime_plugin.TextCommand):
         self.result_view.end_edit(self.edit)
 
         self.result_view.add_regions('results', self.regions.keys(), '')
+        self.result_view.set_syntax_file('Packages/uxTools/issues_results.hidden-tmLanguage')
         self.result_view.settings().set('line_padding_bottom', 2)
         self.result_view.settings().set('line_padding_top', 2)
         self.result_view.settings().set('word_wrap', False)

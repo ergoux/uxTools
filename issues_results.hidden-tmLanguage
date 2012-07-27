@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>name</key>
+    <string>Issues list</string>
+    <key>patterns</key>
+    <array>
+        <dict>
+            <key>match</key>
+            <string>---.+---</string>
+            <key>name</key>
+            <string>keyword</string>
+        </dict>
+        <dict>
+            <key>begin</key>
+            <string>^(#\d+) - \((.+)\)\t(.+)$</string>
+            <key>beginCaptures</key>
+            <dict>
+                <key>1</key>
+                <dict>
+                    <key>name</key>
+                    <string>constant.numeric</string>
+                </dict>
+                <key>2</key>
+                <dict>
+                    <key>name</key>
+                    <string>entity.name.class</string>
+                </dict>
+                <key>3</key>
+                <dict>
+                    <key>name</key>
+                    <string>string</string>
+                </dict>
+            </dict>
+            <key>end</key>
+            <string>(\))</string>
+            <key>endCaptures</key>
+            <dict>
+                <key>1</key>
+                <dict>
+                    <key>name</key>
+                    <string>punctuation.definition.group.regexp</string>
+                </dict>
+            </dict>
+            <key>name</key>
+            <string>meta.group.assertion.regexp</string>
+            <key>patterns</key>
+            <array>
+                <dict>
+                    <key>include</key>
+                    <string>$self</string>
+                </dict>
+            </array>
+        </dict>
+        <dict>
+            <key>match</key>
+            <string>\[[\W+]\]</string>
+            <key>name</key>
+            <string>keyword</string>
+        </dict>
+    </array>
+    <key>scopeName</key>
+    <string>source.regexp.python</string>
+    <key>uuid</key>
+    <string>DD867ABF-1EC6-415D-B047-687F550A1D51</string>
+</dict>
+</plist>
