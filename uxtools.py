@@ -1,7 +1,5 @@
 import sublime, sublime_plugin, re, subprocess, json
 
-issues = {}
-
 def get_window(self):
     return self.view.window() or sublime.active_window()
 
@@ -35,7 +33,7 @@ class uxtool_list_all_issues(sublime_plugin.TextCommand):
             "state" : "closed"
         }
 
-        self.regions = {}
+        self.regions, self.issues = {}, {}
 
         self.result_view = get_window(self).new_file()
         self.result_view.set_scratch(True)
@@ -55,6 +53,7 @@ class uxtool_list_all_issues(sublime_plugin.TextCommand):
             self.insert_issue(issue);
 
         self.result_view.end_edit(self.edit)
+        self.result_view.settings().set('issues_data', json.dumps(self.issues))
 
         self.result_view.add_regions('results', self.regions.keys(), '')
         self.result_view.set_syntax_file('Packages/uxTools/issues_results.hidden-tmLanguage')
@@ -64,8 +63,7 @@ class uxtool_list_all_issues(sublime_plugin.TextCommand):
         self.result_view.settings().set('command_mode', True)
 
     def insert_issue(self, issue):
-        global issues
-        issues[issue['number']] = issue
+        self.issues[issue['number']] = issue
 
         insert_point = self.result_view.size()
         #self.print_c('#' + str(issue['number']) + ' - ' + issue['title'])
@@ -129,9 +127,11 @@ class goto_issue(sublime_plugin.TextCommand):
         super(goto_issue, self).__init__(*args)
 
     def run(self, edit):
-        global issues
+        #global issues
 
-        iss = issues
+        #iss = issues
+
+        iss = json.loads(self.view.settings().get('issues_data', 0))
         ## Get the idx of selected result region
         selection = int(self.view.settings().get('selected_result', -1))
         ## Get the region
@@ -139,7 +139,7 @@ class goto_issue(sublime_plugin.TextCommand):
         
         data = self.view.substr(selected_region)
         issue_num = re.search(r'#(.+) -',data).group(1)
-        selected_issue = iss[int(issue_num)]
+        selected_issue = iss[issue_num]
         print selected_issue
         scratch(self,
             "+ %s\n--- %s\n\n%s\n\n----------\n@@ %s @@" % (
