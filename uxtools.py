@@ -67,7 +67,13 @@ class uxtool_list_all_issues(sublime_plugin.TextCommand):
         issues[issue['number']] = issue
 
         insert_point = self.result_view.size()
-        self.print_c('#' + str(issue['number']) + ' - ' + issue['title'], )
+        #self.print_c('#' + str(issue['number']) + ' - ' + issue['title'])
+        if issue['assignee']:
+            assignee = issue['assignee']['login']
+        else:
+            assignee = "UNASSIGNED"
+        
+        self.print_c('#%i - (%s)\t%s' % (issue['number'], assignee, issue['title']))
         rgn = sublime.Region(insert_point, self.result_view.size())
         self.regions[rgn] = issue
 
