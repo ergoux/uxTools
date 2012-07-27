@@ -1,4 +1,4 @@
-import sublime, sublime_plugin, re, subprocess, json
+import sublime, sublime_plugin, re, subprocess, json, urllib2
 
 def get_window(self):
     return self.view.window() or sublime.active_window()
@@ -26,6 +26,23 @@ def _output_to_view(self, output_file, output, clear=False,
         output_file.erase(edit, region)
     output_file.insert(edit, 0, output)
     output_file.end_edit(edit)
+
+def git_api_get(url,data=False):
+    print "->","https://api.github.com/%s" % url
+    token = sublime.load_settings("Preferences.sublime-settings").get("git_token")
+    opener = urllib2.build_opener(
+        urllib2.HTTPRedirectHandler(),
+        urllib2.HTTPHandler(debuglevel=0),
+        urllib2.HTTPSHandler(debuglevel=0))
+    opener.addheaders = [('Authorization',('token %s' % token))]
+    if data: 
+        print "DATA",data
+        resp = opener.open("https://api.github.com/%s" % url,json.dumps(data)).read()
+    else:
+        resp = opener.open("https://api.github.com/%s" % url).read()
+        print resp
+    return json.loads(resp)
+
 
 class uxtool_list_all_issues(sublime_plugin.TextCommand):
     def run(self,edit):
@@ -71,7 +88,7 @@ class uxtool_list_all_issues(sublime_plugin.TextCommand):
             assignee = issue['assignee']['login']
         else:
             assignee = "UNASSIGNED"
-        
+
         self.print_c('#%i - (%s)\t%s' % (issue['number'], assignee, issue['title']))
         rgn = sublime.Region(insert_point, self.result_view.size())
         self.regions[rgn] = issue
@@ -80,13 +97,8 @@ class uxtool_list_all_issues(sublime_plugin.TextCommand):
         self.result_view.insert(self.edit, self.result_view.size(), str + "\n")
 
     def get_issues(self, status):
-        token = sublime.load_settings("Preferences.sublime-settings").get("git_token")
-        issues, load_info = subprocess.Popen(["curl",
-            "-H","Authorization: token %s" % token,
-            "https://api.github.com/repos/ergoux/kitukids/issues?state=%s" % status],
-            stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
-        return json.loads(issues)
-
+        return git_api_get("repos/ergoux/kitukids/issues?state=%s" % status)
+         
 class navigate_results(sublime_plugin.TextCommand):
     DIRECTION = {'forward': 1, 'backward': -1}
     STARTING_POINT = {'forward': -1, 'backward': 0}
@@ -153,12 +165,7 @@ class goto_issue(sublime_plugin.TextCommand):
 class uxtool_list_issues(sublime_plugin.TextCommand):
     def run(self,edit):
         self.edit = edit
-        token = sublime.load_settings("Preferences.sublime-settings").get("git_token")
-        issues, load_info = subprocess.Popen(["curl",
-            "-H","Authorization: token %s" % token,
-            "https://api.github.com/issues"],
-            stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
-        issues = json.loads(issues)
+        issues = git_api_get('issues')
         self.options = []
         self.issues = issues
         for issue in issues:
@@ -180,6 +187,7 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
                     selected_issue['body'],
                     selected_issue['updated_at']
                     ),self.issues[self.picked]['title'])
+
         elif opt == 1:
             sublime.active_window().run_command('open_url', {"url": selected_issue['html_url']})
         elif opt == 2:
@@ -233,15 +241,8 @@ class uxtool_upload_issues(sublime_plugin.TextCommand):
                 "milestone" : obj[3],
                 "labels"    : obj[4].split(",")
             }
-            resp, load_info = subprocess.Popen([
-                "curl",
-                "-H","Authorization: token a1e2d5fc89820ae538c90662e6aadf21fc078ec5",
-                "-d", json.dumps(issue_info),
-                "-X","POST",
-                'https://api.github.com/repos/%s/issues' % repo
-            ],
-            stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
-            panel.insert(edit, 0,resp)
+            resp = git_api_get('repos/%s/issues' % repo,issue_info)
+            panel.insert(edit, 0, json.dumps(resp))
 
 class uxtool_take_screenshot(sublime_plugin.TextCommand):
     def run(self, edit):
