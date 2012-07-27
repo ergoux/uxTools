@@ -15,7 +15,7 @@
     "caption": "uxTool: Take ScreenShot"
     , "command": "uxtool_take_screenshot"
   },{
-    "caption": "uxTool: KK_Sync"
-    , "command": "uxtool_kk_sync"
+    "caption": "uxTool: List ALL issues"
+    , "command": "uxtool_list_all_issues"
   }
 ]
