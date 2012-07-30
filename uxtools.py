@@ -7,22 +7,21 @@ class GitApiGetAsync ( threading.Thread ):
         self.url = url
         self.callback = callback
         self.data = data
+        self.token = sublime.load_settings("Preferences.sublime-settings").get("git_token")
         threading.Thread.__init__ ( self )
-    def run ( self ):
-        sublime.set_timeout(self.do, 100)
 
-    def do (self):
-        token = sublime.load_settings("Preferences.sublime-settings").get("git_token")
+    def run ( self ):
         opener = urllib2.build_opener(
             urllib2.HTTPRedirectHandler(),
             urllib2.HTTPHandler(debuglevel=0),
             urllib2.HTTPSHandler(debuglevel=0))
-        opener.addheaders = [('Authorization',('token %s' % token))]
+        opener.addheaders = [('Authorization',('token %s' % self.token))]
         if self.url[:5] != 'https': self.url = "https://api.github.com/%s" % self.url
         if self.data: 
             resp = opener.open(self.url,json.dumps(self.data)).read()
         else:
             resp = opener.open(self.url).read()
+
         self.callback(json.loads(resp))
 
 class ThreadProgress():
@@ -108,8 +107,10 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
             "url": "issues"
         }
     }
-    def cb(self, result):
-        print result
+
+    def cb(self, user):
+        print self,user
+        self.print_c("Hello %s " % ( user['login']))
 
     def run(self,edit,issues_to_display):
         self.regions, self.issues = {}, {}
@@ -120,7 +121,10 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
         thread = GitApiGetAsync(
             "user",
             lambda user:
-                self.print_c("Hello %s [%s]" % (user['name'], user['login']))
+                sublime.set_timeout(
+                    lambda: self.cb(user)
+                , 100
+                )
         )
         thread.start()
         ThreadProgress(thread, 'Loading user data', '')
@@ -133,7 +137,8 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
         self.get_issues(
             self.display_options[issues_to_display]["url"],
             "open",
-            self.insert_issues
+            self.insert_issues,
+            "--- OPENED ---\n"
         )
 
         self.print_c("")
@@ -142,46 +147,58 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
         self.get_issues(
             self.display_options[issues_to_display]["url"],
             "closed",
-            self.insert_issues
+            self.insert_issues,
+            "--- CLOSED ---\n"
         )
 
-        self.result_view.settings().set('issues_data', json.dumps(self.issues))
-
-        self.result_view.add_regions('results', self.regions.keys(), '')
         self.result_view.set_syntax_file('Packages/uxTools/issues_results.hidden-tmLanguage')
         self.result_view.settings().set('line_padding_bottom', 2)
         self.result_view.settings().set('line_padding_top', 2)
         self.result_view.settings().set('word_wrap', False)
         self.result_view.settings().set('command_mode', True)
 
-    def insert_issues(self, issues):
+    def insert_issues(self, issues,wildcard=False):
+        print wildcard
+        print self.result_view.find(wildcard, 0).b
+        insert_point = self.result_view.find(wildcard, 0).b
+        if not insert_point: insert_point = 0
+
         for issue in issues:
-            self.insert_issue(issue)
+            insert_point += self.insert_issue(issue,insert_point)
 
-    def insert_issue(self, issue):
+        self.result_view.settings().set('issues_data', json.dumps(self.issues))
+        self.result_view.add_regions('results', self.regions.keys(), '')
+
+    def insert_issue(self, issue,insert_point=False):
         self.issues[issue['number']] = issue
-
-        insert_point = self.result_view.size()
         #self.print_c('#' + str(issue['number']) + ' - ' + issue['title'])
         if issue['assignee']:
             assignee = issue['assignee']['login']
         else:
             assignee = "UNASSIGNED"
 
-        self.print_c('#%i - (%s)\t%s' % (issue['number'], assignee, issue['title']))
-        rgn = sublime.Region(insert_point, self.result_view.size())
+        len1 = self.print_c('#%i - (%s)\t%s' % (issue['number'], assignee, issue['title']),insert_point)
+        rgn = sublime.Region(insert_point, insert_point + len1)
         self.regions[rgn] = issue
+        return len1
 
-    def print_c(self, str):
+    def print_c(self, str1,insert_point=False):
+        print insert_point
+        if not insert_point: insert_point = self.result_view.size()
         edit = self.result_view.begin_edit()
-        self.result_view.insert(edit, self.result_view.size(), str + "\n")
+        str1 += "\n"
+        self.result_view.insert(edit, insert_point, str1)
         self.result_view.end_edit(edit)
+        return str1.__len__()
 
-    def get_issues(self, url, status, callback):
+    def get_issues(self, url, status, callback,wildcard):
         GitApiGetAsync(
             "%s?state=%s" % (url,status),
             lambda issues:
-                callback(issues)
+                sublime.set_timeout(
+                    lambda: callback(issues,wildcard)
+                , 100
+                )
         ).start()
          
 class navigate_results(sublime_plugin.TextCommand):
