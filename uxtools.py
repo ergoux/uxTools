@@ -1,4 +1,58 @@
-import sublime, sublime_plugin, re, subprocess, json, urllib2
+import sublime, sublime_plugin
+import re, json, urllib2
+import threading
+
+class GitApiGetAsync ( threading.Thread ):
+    def __init__(self, url, callback, data = False):
+        self.url = url
+        self.callback = callback
+        self.data = data
+        threading.Thread.__init__ ( self )
+    def run ( self ):
+        sublime.set_timeout(self.do, 100)
+
+    def do (self):
+        token = sublime.load_settings("Preferences.sublime-settings").get("git_token")
+        opener = urllib2.build_opener(
+            urllib2.HTTPRedirectHandler(),
+            urllib2.HTTPHandler(debuglevel=0),
+            urllib2.HTTPSHandler(debuglevel=0))
+        opener.addheaders = [('Authorization',('token %s' % token))]
+        if self.url[:5] != 'https': self.url = "https://api.github.com/%s" % self.url
+        if self.data: 
+            resp = opener.open(self.url,json.dumps(self.data)).read()
+        else:
+            resp = opener.open(self.url).read()
+        self.callback(json.loads(resp))
+
+class ThreadProgress():
+    def __init__(self, thread, message, success_message):
+        self.thread = thread
+        self.message = message
+        self.success_message = success_message
+        self.addend = 1
+        self.size = 8
+        sublime.set_timeout(lambda: self.run(0), 100)
+
+    def run(self, i):
+        if not self.thread.is_alive():
+            if hasattr(self.thread, 'result') and not self.thread.result:
+                sublime.status_message('')
+                return
+            sublime.status_message(self.success_message)
+            return
+
+        before = i % self.size
+        after = (self.size - 1) - before
+        sublime.status_message('%s [%s=%s]' % \
+            (self.message, ' ' * before, ' ' * after))
+        if not after:
+            self.addend = -1
+        if not before:
+            self.addend = 1
+        i += self.addend
+        sublime.set_timeout(lambda: self.run(i), 100)
+
 
 def get_window(self):
     return self.view.window() or sublime.active_window()
@@ -28,6 +82,7 @@ def _output_to_view(self, output_file, output, clear=False,
     output_file.end_edit(edit)
 
 def git_api_get(url,data=False):
+    print "git_api_get called"
     token = sublime.load_settings("Preferences.sublime-settings").get("git_token")
     opener = urllib2.build_opener(
         urllib2.HTTPRedirectHandler(),
@@ -53,28 +108,43 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
             "url": "issues"
         }
     }
+    def cb(self, result):
+        print result
 
     def run(self,edit,issues_to_display):
         self.regions, self.issues = {}, {}
 
         self.result_view = get_window(self).new_file()
         self.result_view.set_scratch(True)
-        self.edit = self.result_view.begin_edit()
+
+        thread = GitApiGetAsync(
+            "user",
+            lambda user:
+                self.print_c("Hello %s [%s]" % (user['name'], user['login']))
+        )
+        thread.start()
+        ThreadProgress(thread, 'Loading user data', '')
+
+        self.print_c("Display : %s" % (self.display_options[issues_to_display]["display_str"]))
         
-        self.print_c("Display : " + self.display_options[issues_to_display]["display_str"])
         self.print_c("")
         self.print_c("--- OPENED ---")
 
-        for issue in self.get_issues(self.display_options[issues_to_display]["url"],"open"):
-            self.insert_issue(issue)
+        self.get_issues(
+            self.display_options[issues_to_display]["url"],
+            "open",
+            self.insert_issues
+        )
 
         self.print_c("")
         self.print_c("--- CLOSED ---")
 
-        for issue in self.get_issues(self.display_options[issues_to_display]["url"],"closed"):
-            self.insert_issue(issue);
+        self.get_issues(
+            self.display_options[issues_to_display]["url"],
+            "closed",
+            self.insert_issues
+        )
 
-        self.result_view.end_edit(self.edit)
         self.result_view.settings().set('issues_data', json.dumps(self.issues))
 
         self.result_view.add_regions('results', self.regions.keys(), '')
@@ -83,6 +153,10 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
         self.result_view.settings().set('line_padding_top', 2)
         self.result_view.settings().set('word_wrap', False)
         self.result_view.settings().set('command_mode', True)
+
+    def insert_issues(self, issues):
+        for issue in issues:
+            self.insert_issue(issue)
 
     def insert_issue(self, issue):
         self.issues[issue['number']] = issue
@@ -99,10 +173,16 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
         self.regions[rgn] = issue
 
     def print_c(self, str):
-        self.result_view.insert(self.edit, self.result_view.size(), str + "\n")
+        edit = self.result_view.begin_edit()
+        self.result_view.insert(edit, self.result_view.size(), str + "\n")
+        self.result_view.end_edit(edit)
 
-    def get_issues(self, url,status):
-        return git_api_get("%s?state=%s" % (url,status))
+    def get_issues(self, url, status, callback):
+        GitApiGetAsync(
+            "%s?state=%s" % (url,status),
+            lambda issues:
+                callback(issues)
+        ).start()
          
 class navigate_results(sublime_plugin.TextCommand):
     DIRECTION = {'forward': 1, 'backward': -1}
@@ -265,35 +345,35 @@ class uxtool_upload_issues(sublime_plugin.TextCommand):
             resp = git_api_get('repos/%s/issues' % repo,issue_info)
             panel.insert(edit, 0, json.dumps(resp))
 
-class uxtool_take_screenshot(sublime_plugin.TextCommand):
-    def run(self, edit):
-        resp, err = subprocess.Popen(["screencapture","-i","/tmp/imgur_upload.png"],stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-        if not err:
-            resp, err = subprocess.Popen(["curl","-F","image=@/tmp/imgur_upload.png","-F","key=2bfe50a1bbc990e30d6062ecb9216096","http://api.imgur.com/2/upload.json"],stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-            self.links = json.loads(resp)['upload']['links']
-            sublime.set_clipboard(self.links["original"])
-            sublime.status_message("Copied to clipboard %s" % self.links["original"])
+# class uxtool_take_screenshot(sublime_plugin.TextCommand):
+#     def run(self, edit):
+#         resp, err = subprocess.Popen(["screencapture","-i","/tmp/imgur_upload.png"],stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+#         if not err:
+#             resp, err = subprocess.Popen(["curl","-F","image=@/tmp/imgur_upload.png","-F","key=2bfe50a1bbc990e30d6062ecb9216096","http://api.imgur.com/2/upload.json"],stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+#             self.links = json.loads(resp)['upload']['links']
+#             sublime.set_clipboard(self.links["original"])
+#             sublime.status_message("Copied to clipboard %s" % self.links["original"])
 
-class uxtool_kk_sync(sublime_plugin.TextCommand):
-    def run(self, edit):
-        self.options  = [
-                            "Sync: Database",
-                            "Sync: Pull in server",
-                            "Sync: LS"
-                        ]
-        self.commands = [
-                            "ssh bitnami@kitukids.com 'mysqldump -u root -pbitnami kitukids | bzip2 -c' | bunzip2 -c | mysql -u root kitukids",
-                            "ssh","bitnami@kitukids.com 'cd /var/www/dev/ && git pull'",
-                            "ls", "-lh"
-                        ]
-        self.quick_panel(self.options, self.selecion_done)
+# class uxtool_kk_sync(sublime_plugin.TextCommand):
+#     def run(self, edit):
+#         self.options  = [
+#                             "Sync: Database",
+#                             "Sync: Pull in server",
+#                             "Sync: LS"
+#                         ]
+#         self.commands = [
+#                             "ssh bitnami@kitukids.com 'mysqldump -u root -pbitnami kitukids | bzip2 -c' | bunzip2 -c | mysql -u root kitukids",
+#                             "ssh","bitnami@kitukids.com 'cd /var/www/dev/ && git pull'",
+#                             "ls", "-lh"
+#                         ]
+#         self.quick_panel(self.options, self.selecion_done)
 
-    def selecion_done(self, picked):
-        print self.commands[picked]
-        resp, err = subprocess.Popen(self.commands[picked], stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-        print "--------------"
-        print err
-        sublime.status_message(resp);
+#     def selecion_done(self, picked):
+#         print self.commands[picked]
+#         resp, err = subprocess.Popen(self.commands[picked], stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+#         print "--------------"
+#         print err
+#         sublime.status_message(resp);
 
-    def quick_panel(self, *args, **kwargs):
-        sublime.active_window().show_quick_panel(*args, **kwargs)
+#     def quick_panel(self, *args, **kwargs):
+#         sublime.active_window().show_quick_panel(*args, **kwargs)
