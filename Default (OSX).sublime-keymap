@@ -21,7 +21,7 @@
             {"key": "setting.command_mode", "operand": true}
             // {"key": "setting.todo_results"}
         ],
-        "args": {"direction": "forward"}
+        "args": {"direction": "right"}
     },
     {
         "keys": ["left"], "command": "navigate_results",
@@ -29,7 +29,7 @@
             {"key": "setting.command_mode", "operand": true}
             //{"key": "setting.todo_results"}
         ],
-        "args": {"direction": "backward"}
+        "args": {"direction": "left"}
     },
     {
         "keys": ["c"], "command": "clear_selection",

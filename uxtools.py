@@ -24,49 +24,54 @@ def _output_to_view(self, output_file, output, clear=False,
     if clear:
         region = sublime.Region(0, self.output_view.size())
         output_file.erase(edit, region)
-    output_file.insert(edit, 0, output)
+    output_file.insert(edit, output_file.size(), output)
     output_file.end_edit(edit)
 
 def git_api_get(url,data=False):
-    print "->","https://api.github.com/%s" % url
     token = sublime.load_settings("Preferences.sublime-settings").get("git_token")
     opener = urllib2.build_opener(
         urllib2.HTTPRedirectHandler(),
         urllib2.HTTPHandler(debuglevel=0),
         urllib2.HTTPSHandler(debuglevel=0))
     opener.addheaders = [('Authorization',('token %s' % token))]
+    if url[:5] != 'https': url = "https://api.github.com/%s" % url
     if data: 
-        print "DATA",data
-        resp = opener.open("https://api.github.com/%s" % url,json.dumps(data)).read()
+        resp = opener.open(url,json.dumps(data)).read()
     else:
-        resp = opener.open("https://api.github.com/%s" % url).read()
-        print resp
+        resp = opener.open(url).read()
     return json.loads(resp)
 
 
-class uxtool_list_all_issues(sublime_plugin.TextCommand):
-    def run(self,edit):
-        data = {
-            "state" : "closed"
+class uxtool_list_issues(sublime_plugin.TextCommand):
+    display_options = {
+        "all": {
+            "display_str": "all issues",
+            "url": "repos/ergoux/kitukids/issues"
+        },
+        "mine": {
+            "display_str" : "your issues",
+            "url": "issues"
         }
+    }
 
+    def run(self,edit,issues_to_display):
         self.regions, self.issues = {}, {}
 
         self.result_view = get_window(self).new_file()
         self.result_view.set_scratch(True)
         self.edit = self.result_view.begin_edit()
         
-        self.print_c("Issues:")
+        self.print_c("Display : " + self.display_options[issues_to_display]["display_str"])
         self.print_c("")
         self.print_c("--- OPENED ---")
 
-        for issue in self.get_issues("open"):
+        for issue in self.get_issues(self.display_options[issues_to_display]["url"],"open"):
             self.insert_issue(issue)
 
         self.print_c("")
         self.print_c("--- CLOSED ---")
 
-        for issue in self.get_issues("closed"):
+        for issue in self.get_issues(self.display_options[issues_to_display]["url"],"closed"):
             self.insert_issue(issue);
 
         self.result_view.end_edit(self.edit)
@@ -96,38 +101,63 @@ class uxtool_list_all_issues(sublime_plugin.TextCommand):
     def print_c(self, str):
         self.result_view.insert(self.edit, self.result_view.size(), str + "\n")
 
-    def get_issues(self, status):
-        return git_api_get("repos/ergoux/kitukids/issues?state=%s" % status)
+    def get_issues(self, url,status):
+        return git_api_get("%s?state=%s" % (url,status))
          
 class navigate_results(sublime_plugin.TextCommand):
     DIRECTION = {'forward': 1, 'backward': -1}
     STARTING_POINT = {'forward': -1, 'backward': 0}
+    OPTS = ("View Info  ->  ","Open in Browser  ->  ","Copy #  ->  ")
+    currOpt = 0
+    prevSelection = None
+    diff = 0
 
     def __init__(self, view):
         super(navigate_results, self).__init__(view)
 
-    def run(self, edit, direction):
+    def run(self, edit,direction):
         view = self.view
         settings = view.settings()
+
+        if self.prevSelection is not None:
+            self.diff = self.prevSelection["region"].b - self.prevSelection["region"].a
+            self.view.erase(edit, self.prevSelection["region"])
+
+        
         results = self.view.get_regions('results')
         if not results:
             sublime.status_message('No results to navigate')
-            return
+            return        
 
-        ##NOTE: numbers stored in settings are coerced to floats or longs
-        selection = int(settings.get('selected_result', self.STARTING_POINT[direction]))
-        selection = selection + self.DIRECTION[direction]
+        selection = int(settings.get('selected_result', 0))
+        if direction in self.DIRECTION: selection = selection + self.DIRECTION[direction]
+
         try:
             target = results[selection]
         except IndexError:
             target = results[0]
             selection = 0
-
+    
         settings.set('selected_result', selection)
-        ## Create a new region for highlighting
         target = target.cover(target)
-        view.add_regions('selection', [target], 'selected', 'dot')
-        view.show(target)
+
+        if not direction in self.DIRECTION:     
+            if direction == 'left': self.currOpt = self.currOpt - 1
+            if direction == 'right': self.currOpt = self.currOpt + 1
+            if self.currOpt > 2 : self.currOpt = 0
+            if self.currOpt < 0 : self.currOpt = 2
+            
+            opt_len = self.OPTS[self.currOpt].__len__()
+            self.view.insert(edit, target.a, self.OPTS[self.currOpt])
+            self.prevSelection = {"region":sublime.Region(target.a, target.a + opt_len)}
+
+        else:
+            view.add_regions('selection', [target], 'selected', 'dot')
+            view.show(target)
+            self.prevSelection = None
+            self.currOpt = 0
+        settings.set('selected_result_opt', self.currOpt)
+
 
 class clear_selection(sublime_plugin.TextCommand):
     def run(self, edit):
@@ -137,13 +167,39 @@ class clear_selection(sublime_plugin.TextCommand):
 class goto_issue(sublime_plugin.TextCommand):
     def __init__(self, *args):
         super(goto_issue, self).__init__(*args)
+    
+    def render_issue(self,edit,selected_issue):
+        scratch_file = scratch(self,
+            "+ %s\n--- %s\n\n%s\n\n----------\n@@ %s @@" % (
+                selected_issue['title'],
+                "ergoux/kitukids -> issue #" + str(selected_issue['number']),
+                selected_issue['body'],
+                selected_issue['updated_at']
+                ),selected_issue['title'])
+
+        issue_comments = git_api_get(selected_issue['url'] + "/comments")
+
+        for issue_comment in issue_comments:
+            _output_to_view(
+                self,
+                scratch_file,
+                "\n+comment by %s\n%s\n----\n" % (
+                    issue_comment['user']['login'],
+                    issue_comment['body']
+                    )
+            )
+        #os.system("say %s"% (selected_issue['title']))
+
+
+    def open_in_browser(self,edit,selected_issue):
+        sublime.active_window().run_command('open_url', {"url": selected_issue['html_url']})
+
+    def copy_number(self,edit,selected_issue):
+        sublime.set_clipboard('#' + str(selected_issue['number']))
 
     def run(self, edit):
-        #global issues
-
-        #iss = issues
-
         iss = json.loads(self.view.settings().get('issues_data', 0))
+        opt = self.view.settings().get('selected_result_opt', 0)
         ## Get the idx of selected result region
         selection = int(self.view.settings().get('selected_result', -1))
         ## Get the region
@@ -152,46 +208,11 @@ class goto_issue(sublime_plugin.TextCommand):
         data = self.view.substr(selected_region)
         issue_num = re.search(r'#(.+) -',data).group(1)
         selected_issue = iss[issue_num]
-        print selected_issue
-        scratch(self,
-            "+ %s\n--- %s\n\n%s\n\n----------\n@@ %s @@" % (
-                selected_issue['title'],
-                "ergoux/kitukids -> issue #" + str(selected_issue['number']),
-                selected_issue['body'],
-                selected_issue['updated_at']
-                ),selected_issue['title'])
-        #sublime.active_window().run_command('open_url', {"url": selected_issue['html_url']})
-
-class uxtool_list_issues(sublime_plugin.TextCommand):
-    def run(self,edit):
-        self.edit = edit
-        issues = git_api_get('issues')
-        self.options = []
-        self.issues = issues
-        for issue in issues:
-            self.options.append(str(issue['number']) + ' - ' + issue['title'])
-        quick_panel(self,self.options, self.issue_choosed)
-
-    def issue_choosed(self, picked):
-        if not picked == -1:
-            self.picked = picked
-            quick_panel(self,['view info','open url in browser','print number'], self.selection_done)
-
-    def selection_done(self,opt):
-        selected_issue = self.issues[self.picked]
-        if opt == 0:
-            scratch(self,
-                "+ %s\n--- %s\n\n%s\n\n----------\n@@ %s @@" % (
-                    selected_issue['title'],
-                    selected_issue['repository']['full_name'] + " -> issue #" + str(selected_issue['number']),
-                    selected_issue['body'],
-                    selected_issue['updated_at']
-                    ),self.issues[self.picked]['title'])
-
-        elif opt == 1:
-            sublime.active_window().run_command('open_url', {"url": selected_issue['html_url']})
-        elif opt == 2:
-            self.view.insert(self.edit, self.view.sel()[0].a, "#" + str(selected_issue['number']))
+        (
+            self.render_issue,
+            self.open_in_browser,
+            self.copy_number
+        )[opt](edit,selected_issue)
 
 class uxtool_create_css(sublime_plugin.TextCommand):
     def run(self, edit):

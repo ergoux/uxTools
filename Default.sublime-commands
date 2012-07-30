@@ -1,8 +1,5 @@
 [
   {
-    "caption": "uxTool: List issues"
-    , "command": "uxtool_list_issues"
-  },{
     "caption": "uxTool: create css"
     , "command": "uxtool_create_css"
   },{
@@ -16,6 +13,11 @@
     , "command": "uxtool_take_screenshot"
   },{
     "caption": "uxTool: List ALL issues"
-    , "command": "uxtool_list_all_issues"
+    , "command": "uxtool_list_issues"
+    , "args": {"issues_to_display": "all"}
+  },{
+    "caption": "uxTool: List MY issues"
+    , "command": "uxtool_list_issues"
+    , "args": {"issues_to_display": "mine"}
   }
 ]
