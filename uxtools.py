@@ -99,13 +99,36 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
     display_options = {
         "all": {
             "display_str": "all issues",
-            "url": "repos/ergoux/kitukids/issues"
+            "url": "repos/ergoux/kitukids/issues",
+            "milestones": "repos/ergoux/kitukids/milestones"
         },
         "mine": {
             "display_str" : "your issues",
             "url": "issues"
         }
     }
+
+    def dpm(self, obj):
+        print "DPM: ", obj
+
+    def render_milestones(self, milestones):
+        for milestone in milestones:
+            total_issues = int(milestone['closed_issues']) + int(milestone['open_issues'])
+            percentage = (milestone['closed_issues'] * 100 / total_issues)  if total_issues > 0 else 100
+
+            fill = percentage
+            empt = 100 - fill
+
+            percentage_meter = "[" + ("=" * fill) + ">" + (" " * empt) + "]"
+            self.print_c("[%d] %s:\n %s %d/%d\t%d%%" % ( 
+                milestone['number'],
+                milestone['title'], 
+                percentage_meter, 
+                milestone['closed_issues'], 
+                total_issues,
+                percentage
+            ), self.result_view.find('--- MILESTONES ---\n', 0).b)
+        print milestones
 
     def run(self,edit,issues_to_display):
         self.regions, self.issues, self.issues_index  = [], {}, [0]
@@ -117,15 +140,28 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
             "user",
             lambda user:
                 sublime.set_timeout(
-                    lambda: self.print_c("Hello %s " % ( user['login']), self.result_view.find('\n--- OPENED ---', 0).a)
+                    lambda: self.print_c("Hello (%s) " % ( user['login']), self.result_view.find('\n--- MILESTONES ---', 0).a)
                 , 100
                 )
         )
         thread.start()
-        ThreadProgress(thread, 'Loading user data', '')
+        #ThreadProgress(thread, 'Loading user data', '')
 
         self.print_c("Display : %s" % (self.display_options[issues_to_display]["display_str"]))
-        
+
+        self.print_c("")
+        self.print_c("--- MILESTONES ---")
+        print self.display_options[issues_to_display]["milestones"]
+        thread = GitApiGetAsync(
+            self.display_options[issues_to_display]["milestones"],
+            lambda milestones:
+                sublime.set_timeout(
+                    lambda: self.render_milestones(milestones)
+                , 100
+                )
+        )
+        thread.start()
+
         self.print_c("")
         self.print_c("--- OPENED ---")
 
