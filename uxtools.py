@@ -81,7 +81,6 @@ def _output_to_view(self, output_file, output, clear=False,
     output_file.end_edit(edit)
 
 def git_api_get(url,data=False):
-    print "git_api_get called"
     token = sublime.load_settings("Preferences.sublime-settings").get("git_token")
     opener = urllib2.build_opener(
         urllib2.HTTPRedirectHandler(),
@@ -108,12 +107,8 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
         }
     }
 
-    def cb(self, user):
-        print self,user
-        self.print_c("Hello %s " % ( user['login']))
-
     def run(self,edit,issues_to_display):
-        self.regions, self.issues = {}, {}
+        self.regions, self.issues, self.issues_index  = [], {}, [0]
 
         self.result_view = get_window(self).new_file()
         self.result_view.set_scratch(True)
@@ -122,7 +117,7 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
             "user",
             lambda user:
                 sublime.set_timeout(
-                    lambda: self.cb(user)
+                    lambda: self.print_c("Hello %s " % ( user['login']), self.result_view.find('\n--- OPENED ---', 0).a)
                 , 100
                 )
         )
@@ -158,18 +153,41 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
         self.result_view.settings().set('command_mode', True)
 
     def insert_issues(self, issues,wildcard=False):
-        print wildcard
-        print self.result_view.find(wildcard, 0).b
         insert_point = self.result_view.find(wildcard, 0).b
+        base_point = insert_point
+
         if not insert_point: insert_point = 0
 
         for issue in issues:
-            insert_point += self.insert_issue(issue,insert_point)
+            insert_point += self.insert_issue(issue, insert_point)
+
+        total_len = insert_point - base_point
+
+        # if the len of issues_index is 1 it means this is the first group so no check is needed
+        if self.issues_index.__len__() is not 1:
+            # We now get the index of the current issues group region
+            curr_region = self.issues_index[-1]
+            prepending_region = False
+
+            # Checking how deep in the list of issues groups we need to prepend
+            for issue_index in self.issues_index:
+                # If the current region starts before the issue_index it means we are prepending before issue_index region
+                if self.regions[curr_region].a < self.regions[issue_index].a:
+                    prepending_region = issue_index
+                    break
+
+            if prepending_region is not False:
+                # We need to add to the positions the total length of the current issues list
+                for index in range(prepending_region, curr_region):
+                    self.regions[index] = sublime.Region(self.regions[index].a + total_len, self.regions[index].b + total_len)
+
+        # append the indexe of the next region (this index will start a group of issues)
+        self.issues_index.append(self.regions.__len__())
 
         self.result_view.settings().set('issues_data', json.dumps(self.issues))
-        self.result_view.add_regions('results', self.regions.keys(), '')
+        self.result_view.add_regions('results', self.regions, '')
 
-    def insert_issue(self, issue,insert_point=False):
+    def insert_issue(self, issue, insert_point=False):
         self.issues[issue['number']] = issue
         #self.print_c('#' + str(issue['number']) + ' - ' + issue['title'])
         if issue['assignee']:
@@ -179,11 +197,10 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
 
         len1 = self.print_c('#%i - (%s)\t%s' % (issue['number'], assignee, issue['title']),insert_point)
         rgn = sublime.Region(insert_point, insert_point + len1)
-        self.regions[rgn] = issue
+        self.regions.append(rgn)
         return len1
 
-    def print_c(self, str1,insert_point=False):
-        print insert_point
+    def print_c(self, str1, insert_point=False):
         if not insert_point: insert_point = self.result_view.size()
         edit = self.result_view.begin_edit()
         str1 += "\n"
@@ -191,12 +208,12 @@ class uxtool_list_issues(sublime_plugin.TextCommand):
         self.result_view.end_edit(edit)
         return str1.__len__()
 
-    def get_issues(self, url, status, callback,wildcard):
+    def get_issues(self, url, status, callback, wildcard):
         GitApiGetAsync(
             "%s?state=%s" % (url,status),
             lambda issues:
                 sublime.set_timeout(
-                    lambda: callback(issues,wildcard)
+                    lambda: callback(issues, wildcard)
                 , 100
                 )
         ).start()
