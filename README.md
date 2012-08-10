@@ -21,7 +21,7 @@ Installing
 
 **With Git:** Clone the repository in your Sublime Text 2 Packages directory, located somewhere in user's "Home" directory::
 
-    git clone git://github.com/gizmo2040/sublime-iTunes-Control.git
+    git clone git://github.com/ergoux/uxTools
 
 
 The "Packages" packages directory is located at:
