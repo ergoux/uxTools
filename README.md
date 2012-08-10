@@ -1,16 +1,18 @@
-sublime-iTunes-Control
+uxTools
 ======================
 
-Plugin that provides iTunes Control from sublime command palette. 
+Plugin that provides a set of Tools for common tasks.
 
 
 Provides the following features:
 
-* iTunes: Next - Next track.
-* iTunes: Previous - Previous track.
-* iTunes: Pause - Play/Pause.
+* uxTool: list ALL issues.
+* uxTool: list MY issues.
+* uxTool: create css (for selected class).
+* uxTool: paste css object (from webkit inspector).
+* uxTool: upload issue ( beta uploading multiple issues from sublime)
 
-Plugin should work in OSX && Windows.
+Plugin should work in Osx && Win.
 
 Installing
 ----------
@@ -31,3 +33,60 @@ The "Packages" packages directory is located at:
 * Windows::
 
     %APPDATA%/Sublime Text 2/Packages/
+
+Generating token
+----------
+Run The folowing command on console, seting your user name.
+
+
+    curl -u 'YOUR_USER_NAME' -d '{"scopes":["repo"],"note":"uxTools"}' https://api.github.com/authorizations
+
+
+That should awnser with a object like this one:
+
+    {
+      "scopes": [
+        "repo"
+      ],
+      "created_at": "NNNN-NN-NNTnn:nn:nnZ",
+      "note": "uxTools",
+      "token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "updated_at": "NNNN-NN-NNTnn:nn:nnZ",
+      "url": "https://api.github.com/authorizations/nnnnnnnn",
+      "note_url": null,
+      "app": {
+        "url": "http://developer.github.com/v3/oauth/#oauth-authorizations-api",
+        "name": "uxTools (API)"
+      },
+      "id": NNNNNN
+    }
+
+Copy the token number represented by x's on the example.
+
+On Sublime, open the user settings accesible form the command pallete 'Preferences: Settings - User' or the '⌘ ,' short  cut.
+
+Set the git_token variable,
+example:
+
+    {
+        "color_scheme": "Packages/Theme - Aqua/Color Schemes/Monokai Aqua.tmTheme",
+    	"font_size": NN.0,
+    	"git_token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    	"ignored_packages":
+    	[
+    		"Vintage"
+    	],
+    	"theme": "ProKit.sublime-theme",
+    	"todo":
+    	{
+    		"case_sensitive": true,
+    		"patterns":
+    		{
+    			"BUG": "BUG[\\s]*?:+(?P<bug>.*)$",
+    			"NOTE": "NOTE[\\s]*?:+(?P<note>.*)$"
+    		},
+    		"result_title": "list",
+    	}
+    }
+
+Save the file, and Thats it.
